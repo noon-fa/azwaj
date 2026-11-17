@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "brotherProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "isPublished", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "marriageRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brotherId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "marriageRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "responseDeadlineAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "counsellingBookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scholarUid", "order": "ASCENDING" },
+        { "fieldPath": "slotStartIso", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "counsellingSlotLocks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scholarId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scholars",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "fullName", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,738 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================
+    // GLOBAL PRIMITIVE HELPERS
+    // =========================================================
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 180 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isBoundedString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isBoundedStringList(arr, maxItems) {
+      return arr is list && arr.size() >= 1 && arr.size() <= maxItems && arr[0] is string;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'itsmefminsaf@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isStaffWith(permField) {
+      return isEmailVerified()
+        && exists(/databases/$(database)/documents/staffPermissions/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staffPermissions/$(request.auth.uid)).data.isActive == true
+        && get(/databases/$(database)/documents/staffPermissions/$(request.auth.uid)).data[permField] == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // =========================================================
+    // ENTITY VALIDATION BLUEPRINTS (Synchronized with firebase-blueprint.json)
+    // =========================================================
+
+    function isValidUserAccount(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'accountStatus', 'emailVerified', 'countryCode', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'accountStatus', 'emailVerified', 'countryCode', 'createdAt', 'updatedAt'])
+        && data.uid == userId
+        && isBoundedString(data.email, 5, 180)
+        && isBoundedString(data.displayName, 2, 100)
+        && data.role in ['brother', 'scholar', 'staff', 'admin']
+        && data.accountStatus in ['active', 'suspended', 'deletion_requested']
+        && data.emailVerified is bool
+        && isBoundedString(data.countryCode, 2, 4)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaffPermission(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'canReviewBrothers', 'canManageRequests', 'canManageScholars', 'canManageBookings', 'canViewAuditLogs', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'canReviewBrothers', 'canManageRequests', 'canManageScholars', 'canManageBookings', 'canViewAuditLogs', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'])
+        && data.uid == userId
+        && isBoundedString(data.email, 5, 180)
+        && isBoundedString(data.displayName, 2, 100)
+        && data.canReviewBrothers is bool
+        && data.canManageRequests is bool
+        && data.canManageScholars is bool
+        && data.canManageBookings is bool
+        && data.canViewAuditLogs is bool
+        && data.isActive is bool
+        && isBoundedString(data.updatedBy, 1, 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBrotherPublicProfile(data, brotherId) {
+      return data.keys().hasAll(['brotherId', 'displayName', 'birthYear', 'country', 'cityDistrict', 'nationality', 'education', 'occupation', 'maritalStatus', 'religiousPractice', 'languages', 'marriagePreferences', 'about', 'showPhotoPublicly', 'consentToPublish', 'status', 'isPublished', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['brotherId', 'displayName', 'birthYear', 'country', 'cityDistrict', 'nationality', 'education', 'occupation', 'maritalStatus', 'religiousPractice', 'languages', 'marriagePreferences', 'about', 'photoUrl', 'showPhotoPublicly', 'consentToPublish', 'status', 'isPublished', 'createdAt', 'updatedAt'])
+        && data.brotherId == brotherId
+        && isBoundedString(data.displayName, 2, 80)
+        && data.birthYear is int && data.birthYear >= 1945 && data.birthYear <= 2008
+        && isBoundedString(data.country, 2, 60)
+        && isBoundedString(data.cityDistrict, 2, 80)
+        && isBoundedString(data.nationality, 2, 60)
+        && isBoundedString(data.education, 2, 140)
+        && isBoundedString(data.occupation, 2, 120)
+        && data.maritalStatus in ['never_married', 'divorced', 'widowed']
+        && isBoundedString(data.religiousPractice, 10, 600)
+        && isBoundedStringList(data.languages, 10)
+        && isBoundedString(data.marriagePreferences, 10, 800)
+        && isBoundedString(data.about, 20, 1200)
+        && (!('photoUrl' in data) || isBoundedString(data.photoUrl, 0, 500))
+        && data.showPhotoPublicly is bool
+        && data.consentToPublish is bool
+        && data.status in ['pending_review', 'changes_requested', 'approved', 'rejected', 'suspended']
+        && data.isPublished is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBrotherPrivateDetail(data, brotherId) {
+      return data.keys().hasAll(['brotherId', 'fullName', 'email', 'phone', 'dateOfBirth', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['brotherId', 'fullName', 'email', 'phone', 'dateOfBirth', 'adminReviewNote', 'reviewedBy', 'createdAt', 'updatedAt'])
+        && data.brotherId == brotherId
+        && isBoundedString(data.fullName, 2, 100)
+        && isBoundedString(data.email, 5, 180)
+        && isBoundedString(data.phone, 7, 24)
+        && isBoundedString(data.dateOfBirth, 8, 20)
+        && (!('adminReviewNote' in data) || isBoundedString(data.adminReviewNote, 0, 800))
+        && (!('reviewedBy' in data) || isBoundedString(data.reviewedBy, 0, 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMarriageRequest(data, requestId) {
+      return data.keys().hasAll(['requestId', 'lockId', 'brotherId', 'brotherDisplayName', 'waliName', 'waliRelationship', 'waliEmail', 'normalizedWaliEmail', 'waliPhone', 'waliCountry', 'waliCityDistrict', 'sisterName', 'sisterAge', 'sisterCountry', 'sisterCityDistrict', 'sisterEducation', 'sisterLanguages', 'sisterMarriageInfo', 'sisterNote', 'confirmedWaliAuthority', 'privacyConsent', 'status', 'responseDeadlineAt', 'contactSharingStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['requestId', 'lockId', 'brotherId', 'brotherDisplayName', 'waliName', 'waliRelationship', 'waliEmail', 'normalizedWaliEmail', 'waliPhone', 'waliCountry', 'waliCityDistrict', 'sisterName', 'sisterAge', 'sisterCountry', 'sisterCityDistrict', 'sisterEducation', 'sisterOccupation', 'sisterLanguages', 'sisterMarriageInfo', 'sisterNote', 'additionalMessage', 'confirmedWaliAuthority', 'privacyConsent', 'status', 'responseDeadlineAt', 'respondedAt', 'contactSharingStatus', 'brotherSharedContact', 'createdAt', 'updatedAt'])
+        && data.requestId == requestId
+        && isValidId(data.lockId)
+        && isValidId(data.brotherId)
+        && isBoundedString(data.brotherDisplayName, 2, 80)
+        && isBoundedString(data.waliName, 2, 100)
+        && isBoundedString(data.waliRelationship, 2, 60)
+        && isBoundedString(data.waliEmail, 5, 180)
+        && isBoundedString(data.normalizedWaliEmail, 5, 180)
+        && isBoundedString(data.waliPhone, 7, 24)
+        && isBoundedString(data.waliCountry, 2, 60)
+        && isBoundedString(data.waliCityDistrict, 2, 80)
+        && isBoundedString(data.sisterName, 2, 100)
+        && data.sisterAge is int && data.sisterAge >= 18 && data.sisterAge <= 80
+        && isBoundedString(data.sisterCountry, 2, 60)
+        && isBoundedString(data.sisterCityDistrict, 2, 80)
+        && isBoundedString(data.sisterEducation, 2, 140)
+        && (!('sisterOccupation' in data) || isBoundedString(data.sisterOccupation, 0, 120))
+        && isBoundedStringList(data.sisterLanguages, 10)
+        && isBoundedString(data.sisterMarriageInfo, 10, 800)
+        && isBoundedString(data.sisterNote, 10, 1000)
+        && (!('additionalMessage' in data) || isBoundedString(data.additionalMessage, 0, 800))
+        && data.confirmedWaliAuthority == true
+        && data.privacyConsent == true
+        && data.status in ['pending', 'accepted', 'declined', 'expired']
+        && data.responseDeadlineAt is timestamp
+        && (!('respondedAt' in data) || data.respondedAt is timestamp)
+        && data.contactSharingStatus in ['locked', 'wali_contact_released', 'exchanged']
+        && (!('brotherSharedContact' in data) || isBoundedString(data.brotherSharedContact, 0, 300))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMarriageRequestLock(data, lockId) {
+      return data.keys().hasAll(['lockId', 'brotherId', 'activeRequestId', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['lockId', 'brotherId', 'activeRequestId', 'status', 'createdAt', 'updatedAt'])
+        && data.lockId == lockId
+        && isValidId(data.brotherId)
+        && isValidId(data.activeRequestId)
+        && data.status in ['pending', 'accepted', 'declined', 'expired']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidScholarProfile(data, scholarId) {
+      return data.keys().hasAll(['scholarId', 'fullName', 'gender', 'title', 'qualification', 'education', 'expertise', 'languages', 'biography', 'experienceYears', 'counsellingFormats', 'counsellingTypes', 'sessionDurationMinutes', 'sessionPriceLkr', 'currency', 'country', 'timezone', 'isActive', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['scholarId', 'uid', 'email', 'fullName', 'photoUrl', 'gender', 'title', 'qualification', 'education', 'expertise', 'languages', 'biography', 'experienceYears', 'counsellingFormats', 'counsellingTypes', 'sessionDurationMinutes', 'sessionPriceLkr', 'currency', 'country', 'cityLocation', 'timezone', 'isActive', 'createdAt', 'updatedAt'])
+        && data.scholarId == scholarId
+        && (!('uid' in data) || isBoundedString(data.uid, 0, 128))
+        && (!('email' in data) || isBoundedString(data.email, 0, 180))
+        && isBoundedString(data.fullName, 2, 100)
+        && (!('photoUrl' in data) || isBoundedString(data.photoUrl, 0, 500))
+        && data.gender in ['male', 'female']
+        && isBoundedString(data.title, 2, 60)
+        && isBoundedString(data.qualification, 2, 160)
+        && isBoundedString(data.education, 5, 300)
+        && isBoundedStringList(data.expertise, 10)
+        && isBoundedStringList(data.languages, 10)
+        && isBoundedString(data.biography, 20, 1500)
+        && data.experienceYears is int && data.experienceYears >= 0 && data.experienceYears <= 70
+        && isBoundedStringList(data.counsellingFormats, 3)
+        && isBoundedStringList(data.counsellingTypes, 5)
+        && data.sessionDurationMinutes is int && data.sessionDurationMinutes >= 15 && data.sessionDurationMinutes <= 180
+        && data.sessionPriceLkr is int && data.sessionPriceLkr >= 0 && data.sessionPriceLkr <= 100000
+        && isBoundedString(data.currency, 3, 5)
+        && isBoundedString(data.country, 2, 60)
+        && (!('cityLocation' in data) || isBoundedString(data.cityLocation, 0, 120))
+        && isBoundedString(data.timezone, 3, 60)
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidScholarAvailability(data, scholarId) {
+      return data.keys().hasAll(['scholarId', 'timezone', 'weeklyHours', 'breaks', 'unavailableDates', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['scholarId', 'scholarUid', 'timezone', 'weeklyHours', 'breaks', 'unavailableDates', 'createdAt', 'updatedAt'])
+        && data.scholarId == scholarId
+        && (!('scholarUid' in data) || isBoundedString(data.scholarUid, 0, 128))
+        && isBoundedString(data.timezone, 3, 60)
+        && data.weeklyHours is map
+        && data.breaks is list && data.breaks.size() <= 20
+        && data.unavailableDates is list && data.unavailableDates.size() <= 90
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCounsellingSlotLock(data, slotLockId) {
+      return data.keys().hasAll(['slotLockId', 'scholarId', 'bookingId', 'slotStartIso', 'slotEndIso', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['slotLockId', 'scholarId', 'bookingId', 'slotStartIso', 'slotEndIso', 'status', 'createdAt', 'updatedAt'])
+        && data.slotLockId == slotLockId
+        && isValidId(data.scholarId)
+        && isValidId(data.bookingId)
+        && isBoundedString(data.slotStartIso, 10, 40)
+        && isBoundedString(data.slotEndIso, 10, 40)
+        && data.status in ['booked', 'cancelled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCounsellingBooking(data, bookingId) {
+      return data.keys().hasAll(['bookingId', 'slotLockId', 'scholarId', 'scholarName', 'counsellingType', 'format', 'slotStartIso', 'slotEndIso', 'timezone', 'durationMinutes', 'sessionPriceLkr', 'currency', 'clientName', 'clientEmail', 'clientPhone', 'issueSummary', 'status', 'paymentStatus', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['bookingId', 'slotLockId', 'scholarId', 'scholarUid', 'scholarName', 'counsellingType', 'format', 'slotStartIso', 'slotEndIso', 'timezone', 'durationMinutes', 'sessionPriceLkr', 'currency', 'clientName', 'clientEmail', 'clientPhone', 'issueSummary', 'status', 'paymentStatus', 'cancellationReason', 'createdAt', 'updatedAt'])
+        && data.bookingId == bookingId
+        && isValidId(data.slotLockId)
+        && isValidId(data.scholarId)
+        && (!('scholarUid' in data) || isBoundedString(data.scholarUid, 0, 128))
+        && isBoundedString(data.scholarName, 2, 100)
+        && data.counsellingType in ['pre_marital', 'married_couples', 'individual']
+        && data.format in ['online', 'in_person']
+        && isBoundedString(data.slotStartIso, 10, 40)
+        && isBoundedString(data.slotEndIso, 10, 40)
+        && isBoundedString(data.timezone, 3, 60)
+        && data.durationMinutes is int && data.durationMinutes >= 15 && data.durationMinutes <= 180
+        && data.sessionPriceLkr is int && data.sessionPriceLkr >= 0 && data.sessionPriceLkr <= 100000
+        && isBoundedString(data.currency, 3, 5)
+        && isBoundedString(data.clientName, 2, 100)
+        && isBoundedString(data.clientEmail, 5, 180)
+        && isBoundedString(data.clientPhone, 7, 24)
+        && isBoundedString(data.issueSummary, 10, 1000)
+        && data.status in ['confirmed', 'completed', 'cancelled_by_client', 'cancelled_by_scholar', 'cancelled_by_admin']
+        && data.paymentStatus == 'payment_not_enabled'
+        && (!('cancellationReason' in data) || isBoundedString(data.cancellationReason, 0, 400))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContactInquiry(data, inquiryId) {
+      return data.keys().hasAll(['inquiryId', 'name', 'email', 'topic', 'message', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['inquiryId', 'name', 'email', 'topic', 'message', 'status', 'createdAt', 'updatedAt'])
+        && data.inquiryId == inquiryId
+        && isBoundedString(data.name, 2, 100)
+        && isBoundedString(data.email, 5, 180)
+        && isBoundedString(data.topic, 2, 80)
+        && isBoundedString(data.message, 10, 1500)
+        && data.status in ['new', 'reviewed', 'resolved']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationRecord(data, notificationId) {
+      return data.keys().hasAll(['notificationId', 'type', 'recipientEmail', 'subject', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['notificationId', 'type', 'recipientEmail', 'subject', 'status', 'createdAt', 'updatedAt'])
+        && data.notificationId == notificationId
+        && isBoundedString(data.type, 2, 80)
+        && isBoundedString(data.recipientEmail, 5, 180)
+        && isBoundedString(data.subject, 2, 200)
+        && data.status in ['queued', 'sent', 'failed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll(['logId', 'actorUid', 'actorEmail', 'action', 'targetCollection', 'targetId', 'summary', 'createdAt'])
+        && data.keys().hasOnly(['logId', 'actorUid', 'actorEmail', 'action', 'targetCollection', 'targetId', 'summary', 'createdAt'])
+        && data.logId == logId
+        && isBoundedString(data.actorUid, 1, 128)
+        && isBoundedString(data.actorEmail, 5, 180)
+        && isBoundedString(data.action, 2, 100)
+        && isBoundedString(data.targetCollection, 2, 80)
+        && isBoundedString(data.targetId, 1, 128)
+        && isBoundedString(data.summary, 3, 500)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlatformSetting(data, settingId) {
+      return data.keys().hasAll(['settingId', 'countryCode', 'countryName', 'defaultCurrency', 'defaultTimezone', 'requestExpiryDays', 'paymentsEnabled', 'emailProvider', 'supportEmail', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['settingId', 'countryCode', 'countryName', 'defaultCurrency', 'defaultTimezone', 'requestExpiryDays', 'paymentsEnabled', 'emailProvider', 'supportEmail', 'createdAt', 'updatedAt'])
+        && data.settingId == settingId
+        && isBoundedString(data.countryCode, 2, 4)
+        && isBoundedString(data.countryName, 2, 80)
+        && isBoundedString(data.defaultCurrency, 3, 5)
+        && isBoundedString(data.defaultTimezone, 3, 60)
+        && data.requestExpiryDays is int && data.requestExpiryDays >= 1 && data.requestExpiryDays <= 30
+        && data.paymentsEnabled is bool
+        && data.emailProvider in ['resend', 'smtp', 'disabled']
+        && isBoundedString(data.supportEmail, 5, 180)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================
+    // COLLECTION MATCH RULES
+    // =========================================================
+
+    // 1. users: Owner or Admin/Staff can read; self-registration forced to role='brother'
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isEmailVerified()
+        && isValidUserAccount(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            isOwner(userId)
+            && incoming().role == 'brother'
+            && incoming().accountStatus == 'active'
+          )
+        );
+      allow update: if isValidId(userId)
+        && isEmailVerified()
+        && isValidUserAccount(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'emailVerified', 'accountStatus', 'countryCode', 'updatedAt'])
+            && incoming().accountStatus in ['active', 'deletion_requested']
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. admins: Trusted admin registry
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update, delete: if isValidId(userId) && isBootstrappedAdmin();
+    }
+
+    // 3. staffPermissions: Configurable staff access rights
+    match /staffPermissions/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(userId)
+        && isAdmin()
+        && isValidStaffPermission(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isAdmin()
+        && isValidStaffPermission(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 4. brotherProfiles: Public directory (only approved + published)
+    match /brotherProfiles/{brotherId} {
+      allow get: if isValidId(brotherId) && (
+        (existing().status == 'approved' && existing().isPublished == true)
+        || isOwner(brotherId)
+        || isAdmin()
+        || isStaffWith('canReviewBrothers')
+      );
+      allow list: if (resource.data.status == 'approved' && resource.data.isPublished == true)
+        || (isSignedIn() && resource.data.brotherId == request.auth.uid)
+        || isBootstrappedAdmin();
+      allow create: if isValidId(brotherId)
+        && isEmailVerified()
+        && isValidBrotherPublicProfile(incoming(), brotherId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            isOwner(brotherId)
+            && incoming().status == 'pending_review'
+            && incoming().isPublished == false
+          )
+        );
+      allow update: if isValidId(brotherId)
+        && isEmailVerified()
+        && isValidBrotherPublicProfile(incoming(), brotherId)
+        && incoming().brotherId == existing().brotherId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canReviewBrothers')
+          || (
+            isOwner(brotherId)
+            && existing().status != 'suspended'
+            && existing().status != 'rejected'
+            && (
+              // Editing own profile resets to pending_review if previously approved/changes_requested, OR toggles visibility while approved
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['isPublished', 'consentToPublish', 'updatedAt'])
+                && existing().status == 'approved'
+                && (incoming().isPublished == false || incoming().consentToPublish == true)
+              )
+              || (
+                incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'birthYear', 'country', 'cityDistrict', 'nationality', 'education', 'occupation', 'maritalStatus', 'religiousPractice', 'languages', 'marriagePreferences', 'about', 'photoUrl', 'showPhotoPublicly', 'consentToPublish', 'status', 'isPublished', 'updatedAt'])
+                && incoming().status == 'pending_review'
+                && incoming().isPublished == false
+              )
+            )
+          )
+        );
+      allow delete: if isValidId(brotherId) && isAdmin();
+    }
+
+    // 5. brotherPrivateDetails: Isolated PII (owner or admin/staff ONLY)
+    match /brotherPrivateDetails/{brotherId} {
+      allow get: if isValidId(brotherId) && (isOwner(brotherId) || isAdmin() || isStaffWith('canReviewBrothers'));
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(brotherId)
+        && isEmailVerified()
+        && isValidBrotherPrivateDetail(incoming(), brotherId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (isOwner(brotherId) && !('adminReviewNote' in incoming()) && !('reviewedBy' in incoming()))
+        );
+      allow update: if isValidId(brotherId)
+        && isEmailVerified()
+        && isValidBrotherPrivateDetail(incoming(), brotherId)
+        && incoming().brotherId == existing().brotherId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canReviewBrothers')
+          || (
+            isOwner(brotherId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'dateOfBirth', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(brotherId) && isAdmin();
+    }
+
+    // 6. marriageRequests: Strictly private (NEVER public read)
+    match /marriageRequests/{requestId} {
+      allow get: if isValidId(requestId) && (
+        (isEmailVerified() && existing().brotherId == request.auth.uid)
+        || isAdmin()
+        || isStaffWith('canManageRequests')
+      );
+      allow list: if (isEmailVerified() && resource.data.brotherId == request.auth.uid)
+        || isBootstrappedAdmin();
+      // Public wali submission allowed when targeting an approved+published brother AND atomically locking duplicate key
+      allow create: if isValidId(requestId)
+        && isValidMarriageRequest(incoming(), requestId)
+        && incoming().status == 'pending'
+        && incoming().contactSharingStatus == 'locked'
+        && !('respondedAt' in incoming())
+        && !('brotherSharedContact' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/brotherProfiles/$(incoming().brotherId))
+        && get(/databases/$(database)/documents/brotherProfiles/$(incoming().brotherId)).data.status == 'approved'
+        && get(/databases/$(database)/documents/brotherProfiles/$(incoming().brotherId)).data.isPublished == true
+        && existsAfter(/databases/$(database)/documents/marriageRequestLocks/$(incoming().lockId));
+      allow update: if isValidId(requestId)
+        && isEmailVerified()
+        && isValidMarriageRequest(incoming(), requestId)
+        && incoming().requestId == existing().requestId
+        && incoming().lockId == existing().lockId
+        && incoming().brotherId == existing().brotherId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageRequests')
+          || (
+            existing().brotherId == request.auth.uid
+            && existing().status == 'pending'
+            && incoming().status in ['accepted', 'declined']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'respondedAt', 'contactSharingStatus', 'brotherSharedContact', 'updatedAt'])
+            && incoming().respondedAt == request.time
+            && (
+              (incoming().status == 'accepted' && incoming().contactSharingStatus == 'exchanged' && isBoundedString(incoming().brotherSharedContact, 5, 300))
+              || (incoming().status == 'declined' && incoming().contactSharingStatus == 'locked')
+            )
+          )
+        );
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+
+    // 7. marriageRequestLocks: Duplicate prevention lock (brotherId + normalizedWaliEmail hash)
+    match /marriageRequestLocks/{lockId} {
+      allow get: if isValidId(lockId) && (isAdmin() || isStaffWith('canManageRequests'));
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(lockId)
+        && isValidMarriageRequestLock(incoming(), lockId)
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/marriageRequests/$(incoming().activeRequestId));
+      allow update: if isValidId(lockId)
+        && isValidMarriageRequestLock(incoming(), lockId)
+        && incoming().lockId == existing().lockId
+        && incoming().brotherId == existing().brotherId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageRequests')
+          || (
+            isEmailVerified()
+            && get(/databases/$(database)/documents/marriageRequests/$(existing().activeRequestId)).data.brotherId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && incoming().status in ['accepted', 'declined', 'expired']
+          )
+          || (
+            // Allow re-submission ONLY if previous request was declined or expired
+            existing().status in ['declined', 'expired']
+            && incoming().status == 'pending'
+            && existsAfter(/databases/$(database)/documents/marriageRequests/$(incoming().activeRequestId))
+          )
+        );
+      allow delete: if isValidId(lockId) && isAdmin();
+    }
+
+    // 8. scholars: Public directory of active scholars; admin/staff managed
+    match /scholars/{scholarId} {
+      allow get: if isValidId(scholarId) && (
+        existing().isActive == true
+        || (isEmailVerified() && ('uid' in existing()) && existing().uid == request.auth.uid)
+        || isAdmin()
+        || isStaffWith('canManageScholars')
+      );
+      allow list: if resource.data.isActive == true
+        || (isSignedIn() && resource.data.uid == request.auth.uid)
+        || isBootstrappedAdmin();
+      allow create: if isValidId(scholarId)
+        && (isAdmin() || isStaffWith('canManageScholars'))
+        && isValidScholarProfile(incoming(), scholarId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(scholarId)
+        && isEmailVerified()
+        && isValidScholarProfile(incoming(), scholarId)
+        && incoming().scholarId == existing().scholarId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageScholars')
+          || (
+            ('uid' in existing()) && existing().uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['biography', 'counsellingFormats', 'cityLocation', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(scholarId) && isAdmin();
+    }
+
+    // 9. scholarAvailability: Publicly readable schedule rules (no PII)
+    match /scholarAvailability/{scholarId} {
+      allow get: if isValidId(scholarId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(scholarId)
+        && (isAdmin() || isStaffWith('canManageScholars') || (isEmailVerified() && incoming().scholarUid == request.auth.uid))
+        && isValidScholarAvailability(incoming(), scholarId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(scholarId)
+        && isValidScholarAvailability(incoming(), scholarId)
+        && incoming().scholarId == existing().scholarId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageScholars')
+          || (isEmailVerified() && ('scholarUid' in existing()) && existing().scholarUid == request.auth.uid)
+        );
+      allow delete: if isValidId(scholarId) && isAdmin();
+    }
+
+    // 10. counsellingSlotLocks: Zero-PII slot lock for conflict prevention
+    match /counsellingSlotLocks/{slotLockId} {
+      allow get: if isValidId(slotLockId);
+      allow list: if resource.data.status == 'booked' || isBootstrappedAdmin();
+      allow create: if isValidId(slotLockId)
+        && isValidCounsellingSlotLock(incoming(), slotLockId)
+        && incoming().status == 'booked'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/counsellingBookings/$(incoming().bookingId));
+      allow update: if isValidId(slotLockId)
+        && isValidCounsellingSlotLock(incoming(), slotLockId)
+        && incoming().slotLockId == existing().slotLockId
+        && incoming().scholarId == existing().scholarId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageBookings')
+          || (
+            isEmailVerified()
+            && get(/databases/$(database)/documents/scholars/$(existing().scholarId)).data.uid == request.auth.uid
+            && incoming().status == 'cancelled'
+          )
+          || (
+            // Re-booking a previously cancelled slot
+            existing().status == 'cancelled'
+            && incoming().status == 'booked'
+            && existsAfter(/databases/$(database)/documents/counsellingBookings/$(incoming().bookingId))
+          )
+        );
+      allow delete: if isValidId(slotLockId) && isAdmin();
+    }
+
+    // 11. counsellingBookings: Strictly private counselling records (NEVER public)
+    match /counsellingBookings/{bookingId} {
+      allow get: if isValidId(bookingId) && (
+        (isEmailVerified() && ('scholarUid' in existing()) && existing().scholarUid == request.auth.uid)
+        || isAdmin()
+        || isStaffWith('canManageBookings')
+      );
+      allow list: if (isEmailVerified() && resource.data.scholarUid == request.auth.uid)
+        || isBootstrappedAdmin();
+      allow create: if isValidId(bookingId)
+        && isValidCounsellingBooking(incoming(), bookingId)
+        && incoming().status == 'confirmed'
+        && incoming().paymentStatus == 'payment_not_enabled'
+        && !('cancellationReason' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/scholars/$(incoming().scholarId))
+        && get(/databases/$(database)/documents/scholars/$(incoming().scholarId)).data.isActive == true
+        && incoming().sessionPriceLkr == get(/databases/$(database)/documents/scholars/$(incoming().scholarId)).data.sessionPriceLkr
+        && incoming().durationMinutes == get(/databases/$(database)/documents/scholars/$(incoming().scholarId)).data.sessionDurationMinutes
+        && existsAfter(/databases/$(database)/documents/counsellingSlotLocks/$(incoming().slotLockId));
+      allow update: if isValidId(bookingId)
+        && isEmailVerified()
+        && isValidCounsellingBooking(incoming(), bookingId)
+        && incoming().bookingId == existing().bookingId
+        && incoming().slotLockId == existing().slotLockId
+        && incoming().scholarId == existing().scholarId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || isStaffWith('canManageBookings')
+          || (
+            ('scholarUid' in existing()) && existing().scholarUid == request.auth.uid
+            && existing().status == 'confirmed'
+            && incoming().status in ['completed', 'cancelled_by_scholar']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancellationReason', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(bookingId) && isAdmin();
+    }
+
+    // 12. contactInquiries: Public create, admin read/update
+    match /contactInquiries/{inquiryId} {
+      allow get, list: if isBootstrappedAdmin() || (isValidId(inquiryId) && isAdmin());
+      allow create: if isValidId(inquiryId)
+        && isValidContactInquiry(incoming(), inquiryId)
+        && incoming().status == 'new'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(inquiryId)
+        && isAdmin()
+        && isValidContactInquiry(incoming(), inquiryId)
+        && incoming().inquiryId == existing().inquiryId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(inquiryId) && isAdmin();
+    }
+
+    // 13. notifications: Server-side email dispatch log (Admin/Cloud Functions only)
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isAdmin();
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(notificationId)
+        && isAdmin()
+        && isValidNotificationRecord(incoming(), notificationId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update, delete: if isValidId(notificationId) && isAdmin();
+    }
+
+    // 14. auditLogs: Immutable administrative audit trail
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && (isAdmin() || isStaffWith('canViewAuditLogs'));
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(logId)
+        && (isAdmin() || isStaffWith('canReviewBrothers') || isStaffWith('canManageRequests') || isStaffWith('canManageScholars') || isStaffWith('canManageBookings'))
+        && isValidAuditLog(incoming(), logId)
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // 15. platformSettings: Publicly readable non-sensitive config, admin writable
+    match /platformSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isValidId(settingId)
+        && isAdmin()
+        && isValidPlatformSetting(incoming(), settingId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId)
+        && isAdmin()
+        && isValidPlatformSetting(incoming(), settingId)
+        && incoming().settingId == existing().settingId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(settingId) && isAdmin();
+    }
+  }
+}
