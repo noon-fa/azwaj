@@ -19,19 +19,19 @@ import type {
 } from '@/src/types/domain';
 
 export function BrotherDashboardPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [profile, setProfile] = useState<BrotherPublicProfile | null>(null);
   const [privateDetail, setPrivateDetail] = useState<BrotherPrivateDetail | null>(null);
   const [requests, setRequests] = useState<MarriageRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
     Promise.all([
-      getBrotherPublicProfile(firebaseUser.uid),
-      getBrotherPrivateDetail(firebaseUser.uid),
-      listBrotherMarriageRequests(firebaseUser.uid),
+      getBrotherPublicProfile(supabaseUser.id),
+      getBrotherPrivateDetail(supabaseUser.id),
+      listBrotherMarriageRequests(supabaseUser.id),
     ])
       .then(([pub, priv, reqs]) => {
         setProfile(pub);
@@ -39,12 +39,12 @@ export function BrotherDashboardPage() {
         setRequests(reqs);
       })
       .finally(() => setLoading(false));
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   const handleTogglePublish = async (next: boolean) => {
-    if (!firebaseUser || !profile) return;
+    if (!supabaseUser || !profile) return;
     try {
-      await toggleBrotherPublication({ uid: firebaseUser.uid, isPublished: next });
+      await toggleBrotherPublication({ uid: supabaseUser.id, isPublished: next });
       setProfile({ ...profile, isPublished: next });
       toast.success(next ? 'Profile published to public directory.' : 'Profile unpublished.');
     } catch (err) {

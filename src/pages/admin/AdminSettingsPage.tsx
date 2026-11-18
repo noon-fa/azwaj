@@ -11,7 +11,7 @@ import {
 } from '@/src/services/adminService';
 
 export function AdminSettingsPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [requestExpiryDays, setRequestExpiryDays] = useState(7);
   const [emailProvider, setEmailProvider] = useState<'resend' | 'smtp' | 'disabled'>('disabled');
   const [supportEmail, setSupportEmail] = useState('support@azwaj.lk');
@@ -33,12 +33,12 @@ export function AdminSettingsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firebaseUser || !firebaseUser.email) return;
+    if (!supabaseUser || !supabaseUser.email) return;
     setSaving(true);
     try {
       await savePlatformSettings({
-        actorUid: firebaseUser.uid,
-        actorEmail: firebaseUser.email,
+        actorUid: supabaseUser.id,
+        actorEmail: supabaseUser.email,
         requestExpiryDays,
         emailProvider,
         supportEmail,
@@ -122,10 +122,10 @@ export function AdminSettingsPage() {
             type="button"
             variant="outline"
             onClick={async () => {
-              if (!firebaseUser || !firebaseUser.email) return;
+              if (!supabaseUser || !supabaseUser.email) return;
               await initializeSriLankaDirectorySeed({
-                actorUid: firebaseUser.uid,
-                actorEmail: firebaseUser.email,
+                actorUid: supabaseUser.id,
+                actorEmail: supabaseUser.email,
               });
               toast.success('Starter Sri Lanka Alim & Alimah records ensured.');
             }}

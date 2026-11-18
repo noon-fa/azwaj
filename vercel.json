@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/expire-marriage",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

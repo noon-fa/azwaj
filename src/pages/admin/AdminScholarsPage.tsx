@@ -26,7 +26,7 @@ import { fetchAdminDashboardData, saveScholarRecord } from '@/src/services/admin
 import type { ScholarProfile } from '@/src/types/domain';
 
 export function AdminScholarsPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [scholars, setScholars] = useState<ScholarProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -138,15 +138,15 @@ export function AdminScholarsPage() {
   };
 
   const onSubmit = async (values: ScholarFormInput) => {
-    if (!firebaseUser || !firebaseUser.email) return;
+    if (!supabaseUser || !supabaseUser.email) return;
     const parsedExpertise = expertiseText
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
     try {
       await saveScholarRecord({
-        actorUid: firebaseUser.uid,
-        actorEmail: firebaseUser.email,
+        actorUid: supabaseUser.id,
+        actorEmail: supabaseUser.email,
         scholarId: editingId,
         input: {
           ...values,
@@ -236,7 +236,7 @@ export function AdminScholarsPage() {
           <DialogHeader>
             <DialogTitle>{editingId ? 'Edit Scholar Record' : 'Appoint New Scholar'}</DialogTitle>
             <DialogDescription>
-              Scholars are hired directly by Azwaj. Link their Firebase UID once they sign in so
+              Scholars are hired directly by Azwaj. Link their Supabase Auth UID once they sign in so
               they can access the Scholar Portal.
             </DialogDescription>
           </DialogHeader>
@@ -274,7 +274,7 @@ export function AdminScholarsPage() {
                 <Input id="sch-email" type="email" {...register('email')} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="sch-uid">Linked Firebase UID (Optional)</Label>
+                <Label htmlFor="sch-uid">Linked Supabase Auth UID (Optional)</Label>
                 <Input id="sch-uid" {...register('uid')} placeholder="For Scholar Portal access" />
               </div>
               <div className="space-y-1">

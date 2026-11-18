@@ -1,34 +1,25 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  runTransaction,
-  serverTimestamp,
-  where,
-} from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '@/src/lib/firebase';
-import { handleFirestoreError, OperationType } from '@/src/lib/firestoreError';
-import { generateRandomId, makeSlotLockId } from '@/src/lib/utils';
+import { apiPost } from '@/src/lib/api';
+import { supabase } from '@/src/lib/supabase';
 import type { CounsellingBookingInput } from '@/src/schemas/validation';
 import type { CounsellingBooking, CounsellingSlotLock } from '@/src/types/domain';
 
-export async function listBookedSlotsForScholar(
-  scholarId: string
-): Promise<CounsellingSlotLock[]> {
-  try {
-    const q = query(
-      collection(db, 'counsellingSlotLocks'),
-      where('scholarId', '==', scholarId),
-      where('status', '==', 'booked')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as CounsellingSlotLock);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'counsellingSlotLocks');
-  }
+export async function listBookedSlotsForScholar(scholarId: string): Promise<CounsellingSlotLock[]> {
+  const { data, error } = await supabase
+    .from('counselling_bookings')
+    .select('booking_id,scholar_id,slot_start,slot_end,status')
+    .eq('scholar_id', scholarId)
+    .neq('status', 'cancelled_by_client');
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    slotLockId: row.booking_id,
+    bookingId: row.booking_id,
+    scholarId: row.scholar_id,
+    slotStartIso: row.slot_start,
+    slotEndIso: row.slot_end,
+    status: row.status === 'confirmed' ? 'booked' : 'cancelled',
+    createdAt: '',
+    updatedAt: '',
+  }));
 }
 
 export async function createCounsellingBooking(params: {
@@ -36,122 +27,23 @@ export async function createCounsellingBooking(params: {
   slotStartIso: string;
   slotEndIso: string;
   input: CounsellingBookingInput;
-}): Promise<{ bookingId: string; usedCloudFunction: boolean }> {
-  const { scholarId, slotStartIso, slotEndIso, input } = params;
-
-  try {
-    const fn = httpsCallable<Record<string, unknown>, { bookingId: string }>(
-      functions,
-      'createCounsellingBooking'
-    );
-    const res = await fn({
-      scholarId,
-      slotStartIso,
-      slotEndIso,
-      ...input,
-    });
-    return { bookingId: res.data.bookingId, usedCloudFunction: true };
-  } catch (fnError: unknown) {
-    const code = (fnError as { code?: string })?.code || '';
-    if (
-      code.includes('already-exists') ||
-      code.includes('failed-precondition') ||
-      code.includes('invalid-argument')
-    ) {
-      throw fnError;
-    }
-  }
-
-  const bookingId = generateRandomId('book');
-  const slotLockId = makeSlotLockId(scholarId, slotStartIso);
-
-  try {
-    await runTransaction(db, async (tx) => {
-      const scholarRef = doc(db, 'scholars', scholarId);
-      const lockRef = doc(db, 'counsellingSlotLocks', slotLockId);
-      const bookingRef = doc(db, 'counsellingBookings', bookingId);
-
-      const [scholarSnap, lockSnap] = await Promise.all([
-        tx.get(scholarRef),
-        tx.get(lockRef),
-      ]);
-
-      if (!scholarSnap.exists() || scholarSnap.data().isActive !== true) {
-        throw new Error('This scholar is not currently accepting bookings.');
-      }
-
-      if (lockSnap.exists() && lockSnap.data().status === 'booked') {
-        throw new Error('This time slot was just reserved. Please choose another slot.');
-      }
-
-      const scholar = scholarSnap.data();
-
-      const bookingPayload: Record<string, unknown> = {
-        bookingId,
-        slotLockId,
-        scholarId,
-        scholarName: scholar.fullName,
-        counsellingType: input.counsellingType,
-        format: input.format,
-        slotStartIso,
-        slotEndIso,
-        timezone: scholar.timezone || 'Asia/Colombo',
-        durationMinutes: scholar.sessionDurationMinutes,
-        sessionPriceLkr: scholar.sessionPriceLkr,
-        currency: scholar.currency || 'LKR',
-        clientName: input.clientName.trim(),
-        clientEmail: input.clientEmail.trim(),
-        clientPhone: input.clientPhone.trim(),
-        issueSummary: input.issueSummary.trim(),
-        status: 'confirmed',
-        paymentStatus: 'payment_not_enabled',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      if (scholar.uid) {
-        bookingPayload.scholarUid = scholar.uid;
-      }
-
-      tx.set(bookingRef, bookingPayload);
-      tx.set(lockRef, {
-        slotLockId,
-        scholarId,
-        bookingId,
-        slotStartIso,
-        slotEndIso,
-        status: 'booked',
-        createdAt: lockSnap.exists() ? lockSnap.data().createdAt : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    });
-
-    return { bookingId, usedCloudFunction: false };
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('just reserved') || error.message.includes('not currently accepting'))
-    ) {
-      throw error;
-    }
-    handleFirestoreError(error, OperationType.WRITE, 'counsellingBookings');
-  }
+}) {
+  return apiPost<{ bookingId: string }>('/api/counselling/book', params);
 }
 
-export async function listScholarBookings(
-  scholarUid: string
-): Promise<CounsellingBooking[]> {
-  try {
-    const q = query(
-      collection(db, 'counsellingBookings'),
-      where('scholarUid', '==', scholarUid),
-      orderBy('slotStartIso', 'asc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as CounsellingBooking);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'counsellingBookings');
-  }
+export async function listScholarBookings(scholarUid: string): Promise<CounsellingBooking[]> {
+  const { data: scholar } = await supabase.from('scholars').select('scholar_id').eq('uid', scholarUid).maybeSingle();
+  if (!scholar) return [];
+  const { data, error } = await supabase.from('counselling_bookings').select('*').eq('scholar_id', scholar.scholar_id).order('slot_start');
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    ...row,
+    bookingId: row.booking_id,
+    scholarId: row.scholar_id,
+    slotStartIso: row.slot_start,
+    slotEndIso: row.slot_end,
+    sessionPriceLkr: row.session_price_lkr,
+  }));
 }
 
 export async function cancelCounsellingBooking(params: {
@@ -159,54 +51,19 @@ export async function cancelCounsellingBooking(params: {
   slotLockId: string;
   cancelledBy: 'cancelled_by_scholar' | 'cancelled_by_admin';
   reason?: string;
-}): Promise<void> {
-  const { bookingId, slotLockId, cancelledBy, reason } = params;
-
-  try {
-    const fn = httpsCallable(functions, 'cancelCounsellingBooking');
-    await fn({ bookingId, reason });
-    return;
-  } catch (fnError: unknown) {
-    const code = (fnError as { code?: string })?.code || '';
-    if (code.includes('permission-denied')) throw fnError;
-  }
-
-  try {
-    await runTransaction(db, async (tx) => {
-      const bookingRef = doc(db, 'counsellingBookings', bookingId);
-      const lockRef = doc(db, 'counsellingSlotLocks', slotLockId);
-      const snap = await tx.get(bookingRef);
-      if (!snap.exists()) throw new Error('Booking not found.');
-
-      const updateFields: Record<string, unknown> = {
-        status: cancelledBy,
-        updatedAt: serverTimestamp(),
-      };
-      if (reason?.trim()) {
-        updateFields.cancellationReason = reason.trim();
-      }
-
-      tx.update(bookingRef, updateFields);
-      tx.update(lockRef, {
-        status: 'cancelled',
-        updatedAt: serverTimestamp(),
-      });
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `counsellingBookings/${bookingId}`);
-  }
+}) {
+  const { error } = await supabase.from('counselling_bookings').update({
+    status: params.cancelledBy,
+    cancellation_reason: params.reason,
+    updated_at: new Date().toISOString(),
+  }).eq('booking_id', params.bookingId);
+  if (error) throw error;
 }
 
-export async function markBookingCompleted(bookingId: string): Promise<void> {
-  try {
-    await runTransaction(db, async (tx) => {
-      const refDoc = doc(db, 'counsellingBookings', bookingId);
-      tx.update(refDoc, {
-        status: 'completed',
-        updatedAt: serverTimestamp(),
-      });
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `counsellingBookings/${bookingId}`);
-  }
+export async function markBookingCompleted(bookingId: string) {
+  const { error } = await supabase.from('counselling_bookings').update({
+    status: 'completed',
+    updated_at: new Date().toISOString(),
+  }).eq('booking_id', bookingId);
+  if (error) throw error;
 }

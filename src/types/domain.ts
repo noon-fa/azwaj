@@ -1,6 +1,4 @@
-import type { Timestamp } from 'firebase/firestore';
-
-export type UserRole = 'brother' | 'scholar' | 'staff' | 'admin';
+export type UserRole = 'member' | 'brother' | 'scholar' | 'staff' | 'admin';
 export type AccountStatus = 'active' | 'suspended' | 'deletion_requested';
 
 export type BrotherProfileStatus =
@@ -31,8 +29,8 @@ export interface UserAccount {
   accountStatus: AccountStatus;
   emailVerified: boolean;
   countryCode: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface StaffPermission {
@@ -46,8 +44,8 @@ export interface StaffPermission {
   canViewAuditLogs: boolean;
   isActive: boolean;
   updatedBy: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BrotherPublicProfile {
@@ -69,8 +67,8 @@ export interface BrotherPublicProfile {
   consentToPublish: boolean;
   status: BrotherProfileStatus;
   isPublished: boolean;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface BrotherPrivateDetail {
@@ -81,8 +79,8 @@ export interface BrotherPrivateDetail {
   dateOfBirth: string;
   adminReviewNote?: string;
   reviewedBy?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MarriageRequest {
@@ -110,12 +108,12 @@ export interface MarriageRequest {
   confirmedWaliAuthority: boolean;
   privacyConsent: boolean;
   status: MarriageRequestStatus;
-  responseDeadlineAt: Timestamp;
-  respondedAt?: Timestamp;
+  responseDeadlineAt: string;
+  respondedAt?: string;
   contactSharingStatus: 'locked' | 'wali_contact_released' | 'exchanged';
   brotherSharedContact?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ScholarProfile {
@@ -141,8 +139,8 @@ export interface ScholarProfile {
   cityLocation?: string;
   timezone: string;
   isActive: boolean;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DayAvailability {
@@ -164,8 +162,8 @@ export interface ScholarAvailability {
   weeklyHours: Record<string, DayAvailability>; // "0".."6"
   breaks: BreakWindow[];
   unavailableDates: string[]; // "YYYY-MM-DD"
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CounsellingSlotLock {
@@ -175,8 +173,8 @@ export interface CounsellingSlotLock {
   slotStartIso: string;
   slotEndIso: string;
   status: 'booked' | 'cancelled';
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CounsellingBooking {
@@ -200,8 +198,8 @@ export interface CounsellingBooking {
   status: BookingStatus;
   paymentStatus: 'payment_not_enabled';
   cancellationReason?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ContactInquiry {
@@ -211,8 +209,8 @@ export interface ContactInquiry {
   topic: string;
   message: string;
   status: 'new' | 'reviewed' | 'resolved';
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuditLog {
@@ -223,7 +221,7 @@ export interface AuditLog {
   targetCollection: string;
   targetId: string;
   summary: string;
-  createdAt: Timestamp;
+  createdAt: string;
 }
 
 export interface PlatformSetting {
@@ -236,6 +234,6 @@ export interface PlatformSetting {
   paymentsEnabled: boolean;
   emailProvider: 'resend' | 'smtp' | 'disabled';
   supportEmail: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
 }

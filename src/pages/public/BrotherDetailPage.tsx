@@ -79,7 +79,7 @@ export function BrotherDetailPage() {
       });
       setConfirmation({
         requestId: res.requestId,
-        deadlineIso: res.responseDeadlineIso,
+        deadlineIso: res.responseDeadlineAt,
       });
       toast.success('Wali-mediated introduction request submitted.');
     } catch (err) {

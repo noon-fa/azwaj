@@ -13,7 +13,7 @@ import {
 import type { CounsellingFormat, ScholarProfile } from '@/src/types/domain';
 
 export function ScholarProfilePage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [scholar, setScholar] = useState<ScholarProfile | null>(null);
   const [biography, setBiography] = useState('');
   const [cityLocation, setCityLocation] = useState('');
@@ -22,9 +22,9 @@ export function ScholarProfilePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
-    getScholarByUid(firebaseUser.uid)
+    getScholarByUid(supabaseUser.id)
       .then((sch) => {
         setScholar(sch);
         if (sch) {
@@ -34,7 +34,7 @@ export function ScholarProfilePage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   const toggleFormat = (fmt: CounsellingFormat) => {
     setFormats((prev) => {

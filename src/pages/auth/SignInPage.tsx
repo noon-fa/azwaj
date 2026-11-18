@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Mail, CheckCircle2, Info } from 'lucide-react';
+import { Mail, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
@@ -8,18 +8,20 @@ import { Label } from '@/src/components/ui/label';
 import { useAuth } from '@/src/contexts/AuthContext';
 
 export function SignInPage() {
-  const { firebaseUser, role, sendPasswordlessLink, signInWithGoogle } = useAuth();
+  const { supabaseUser, role, signInWithPassword, signUp, resetPassword, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const nextPath = (location.state as { from?: string } | null)?.from || '/dashboard';
 
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [mode, setMode] = useState<'signin'|'signup'|'reset'>('signin');
   const [sending, setSending] = useState(false);
-  const [linkSentTo, setLinkSentTo] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (firebaseUser && firebaseUser.emailVerified && role) {
+    if (supabaseUser?.email_confirmed_at && role) {
       const target =
         role === 'admin' || role === 'staff'
           ? '/admin'
@@ -28,7 +30,7 @@ export function SignInPage() {
             : nextPath;
       navigate(target, { replace: true });
     }
-  }, [firebaseUser, role, navigate, nextPath]);
+  }, [supabaseUser, role, navigate, nextPath]);
 
   const handleEmailLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,18 +41,19 @@ export function SignInPage() {
     }
     setSending(true);
     try {
-      await sendPasswordlessLink(email.trim(), nextPath);
-      setLinkSentTo(email.trim());
-      toast.success('Sign-in link sent to your email.');
+      if (mode === 'signup') {
+        await signUp(email.trim(), password, displayName.trim());
+        toast.success('Account created. Check your email to verify it.');
+      } else if (mode === 'reset') {
+        await resetPassword(email.trim());
+        toast.success('Password reset email sent.');
+      } else {
+        await signInWithPassword(email.trim(), password);
+        toast.success('Signed in successfully.');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to send sign-in link.';
-      if (msg.includes('operation-not-allowed')) {
-        setAuthError(
-          'Email link sign-in is not yet enabled in Firebase Console for azwaj-lk (Authentication → Sign-in method → Email/Password → Enable Email link). You may use Google Sign-In below in the meantime.'
-        );
-      } else {
-        setAuthError(msg);
-      }
+      setAuthError(msg);
     } finally {
       setSending(false);
     }
@@ -92,23 +95,20 @@ export function SignInPage() {
           </div>
         )}
 
-        {linkSentTo ? (
-          <div className="rounded-lg border border-[#E5E0D5] bg-[#FAF9F6] p-5 space-y-3">
-            <div className="flex items-center gap-2 text-[#15803D]">
-              <CheckCircle2 className="h-5 w-5" />
-              <h2 className="text-sm font-semibold text-[#1A2421]">Check Your Inbox</h2>
-            </div>
-            <p className="text-xs leading-relaxed text-[#54615C]">
-              We sent a passwordless verification &amp; sign-in link to{' '}
-              <strong className="text-[#1A2421]">{linkSentTo}</strong>. Open the link on this or
-              any device to complete sign-in.
-            </p>
-            <Button variant="outline" size="sm" onClick={() => setLinkSentTo(null)}>
-              Use a Different Email
+        <div className="flex gap-2">
+          {(['signin','signup','reset'] as const).map((item) => (
+            <Button key={item} type="button" variant={mode === item ? 'default' : 'outline'} size="sm" onClick={() => setMode(item)}>
+              {item === 'signin' ? 'Sign in' : item === 'signup' ? 'Register' : 'Reset'}
             </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleEmailLink} className="space-y-4">
+          ))}
+        </div>
+        <form onSubmit={handleEmailLink} className="space-y-4">
+            {mode === 'signup' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-name">Display Name</Label>
+                <Input id="signin-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="signin-email">Email Address</Label>
               <Input
@@ -120,12 +120,17 @@ export function SignInPage() {
                 required
               />
             </div>
+            {mode !== 'reset' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="signin-password">Password</Label>
+                <Input id="signin-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={sending}>
               <Mail className="h-4 w-4" />
-              <span>{sending ? 'Sending Link…' : 'Send Passwordless Sign-In Link'}</span>
+              <span>{sending ? 'Please wait…' : mode === 'signup' ? 'Create Account' : mode === 'reset' ? 'Send Reset Email' : 'Sign In'}</span>
             </Button>
-          </form>
-        )}
+        </form>
 
         <div className="relative py-1">
           <div className="absolute inset-0 flex items-center">
