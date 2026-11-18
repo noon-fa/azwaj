@@ -12,15 +12,15 @@ import {
 import type { CounsellingBooking } from '@/src/types/domain';
 
 export function ScholarBookingsPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [bookings, setBookings] = useState<CounsellingBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadBookings = async () => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
     try {
-      const rows = await listScholarBookings(firebaseUser.uid);
+      const rows = await listScholarBookings(supabaseUser.id);
       setBookings(rows);
     } finally {
       setLoading(false);
@@ -29,7 +29,7 @@ export function ScholarBookingsPage() {
 
   useEffect(() => {
     void loadBookings();
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   const handleComplete = async (bookingId: string) => {
     try {

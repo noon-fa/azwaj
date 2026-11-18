@@ -25,7 +25,7 @@ import type {
 } from '@/src/types/domain';
 
 export function AdminBrothersPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [brothers, setBrothers] = useState<BrotherPublicProfile[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [loading, setLoading] = useState(true);
@@ -63,12 +63,12 @@ export function AdminBrothersPage() {
   };
 
   const applyDecision = async (status: BrotherProfileStatus, isPublished: boolean) => {
-    if (!firebaseUser || !firebaseUser.email || !selectedBrother) return;
+    if (!supabaseUser || !supabaseUser.email || !selectedBrother) return;
     setSaving(true);
     try {
       await moderateBrotherProfile({
-        actorUid: firebaseUser.uid,
-        actorEmail: firebaseUser.email,
+        actorUid: supabaseUser.id,
+        actorEmail: supabaseUser.email,
         brotherId: selectedBrother.brotherId,
         status,
         isPublished,

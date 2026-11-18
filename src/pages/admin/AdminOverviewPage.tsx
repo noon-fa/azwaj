@@ -18,7 +18,7 @@ import type {
 } from '@/src/types/domain';
 
 export function AdminOverviewPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [data, setData] = useState<{
@@ -56,12 +56,12 @@ export function AdminOverviewPage() {
   }, []);
 
   const handleSeedSriLanka = async () => {
-    if (!firebaseUser || !firebaseUser.email) return;
+    if (!supabaseUser || !supabaseUser.email) return;
     setSeeding(true);
     try {
       await initializeSriLankaDirectorySeed({
-        actorUid: firebaseUser.uid,
-        actorEmail: firebaseUser.email,
+        actorUid: supabaseUser.id,
+        actorEmail: supabaseUser.email,
       });
       toast.success('Initialized Sri Lanka settings and starter Alim & Alimah scholar records.');
       await loadData();

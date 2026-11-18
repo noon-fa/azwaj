@@ -4,106 +4,58 @@ import { toast } from 'sonner';
 import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
-import { useAuth } from '@/src/contexts/AuthContext';
+import { supabase } from '@/src/lib/supabase';
 
 export function AuthCompletePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { checkIsEmailSignInLink, completeEmailLink } = useAuth();
-
-  const emailHint = searchParams.get('emailHint') || '';
-  const nextPath = searchParams.get('next') || '/dashboard';
-
-  const [email, setEmail] = useState(emailHint);
-  const [status, setStatus] = useState<'checking' | 'needs_email' | 'completing' | 'error'>(
-    'checking'
-  );
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const recovery = searchParams.get('mode') === 'recovery';
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<'ready' | 'error' | 'done'>('ready');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    const href = window.location.href;
-    if (!checkIsEmailSignInLink(href)) {
+    if (!recovery) {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          toast.success('Email verified and signed in.');
+          navigate('/dashboard', { replace: true });
+        }
+      });
+    }
+  }, [navigate, recovery]);
+
+  const updatePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setErrorMsg(error.message);
       setStatus('error');
-      setErrorMsg('This sign-in link is invalid or has already expired. Please request a new link.');
       return;
     }
-    if (emailHint) {
-      setStatus('completing');
-      completeEmailLink(emailHint, href)
-        .then(() => {
-          toast.success('Email verified and signed in.');
-          navigate(nextPath, { replace: true });
-        })
-        .catch((err) => {
-          setStatus('error');
-          setErrorMsg(
-            err instanceof Error
-              ? err.message
-              : 'The sign-in link has expired or could not be verified.'
-          );
-        });
-    } else {
-      setStatus('needs_email');
-    }
-  }, [checkIsEmailSignInLink, completeEmailLink, emailHint, navigate, nextPath]);
-
-  const handleConfirmEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatus('completing');
-    setErrorMsg(null);
-    try {
-      await completeEmailLink(email.trim(), window.location.href);
-      toast.success('Email verified and signed in.');
-      navigate(nextPath, { replace: true });
-    } catch (err) {
-      setStatus('error');
-      setErrorMsg(
-        err instanceof Error ? err.message : 'Unable to verify this email sign-in link.'
-      );
-    }
+    setStatus('done');
+    toast.success('Password updated.');
   };
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
       <div className="rounded-xl border border-[#E5E0D5] bg-white p-8 space-y-5">
         <h1 className="font-serif text-2xl font-semibold text-[#1A2421]">
-          Completing Email Verification
+          {recovery ? 'Set a New Password' : 'Completing Email Verification'}
         </h1>
-
-        {(status === 'checking' || status === 'completing') && (
-          <p className="text-sm text-[#54615C]">
-            Verifying your secure sign-in link…
-          </p>
-        )}
-
-        {status === 'needs_email' && (
-          <form onSubmit={handleConfirmEmail} className="space-y-4">
-            <p className="text-sm text-[#54615C]">
-              To complete sign-in safely on this device, please confirm the email address you used
-              to request the link.
-            </p>
+        {recovery && status !== 'done' ? (
+          <form onSubmit={updatePassword} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="confirm-email">Email Address</Label>
-              <Input
-                id="confirm-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <Label htmlFor="new-password">New Password</Label>
+              <Input id="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
             </div>
-            <Button type="submit" className="w-full">
-              Verify &amp; Sign In
-            </Button>
+            {status === 'error' && <p className="text-sm text-[#B91C1C]">{errorMsg}</p>}
+            <Button type="submit" className="w-full">Update Password</Button>
           </form>
-        )}
-
-        {status === 'error' && (
-          <div className="space-y-4">
-            <p className="text-sm text-[#B91C1C]">{errorMsg}</p>
-            <Button asChild variant="outline" className="w-full">
-              <Link to="/sign-in">Request a Fresh Sign-In Link</Link>
-            </Button>
+        ) : (
+          <div className="space-y-4 text-sm text-[#54615C]">
+            {status === 'done' ? <p>Your password has been updated.</p> : <p>Checking your Supabase verification session…</p>}
+            <Button asChild variant="outline"><Link to="/sign-in">Return to Sign In</Link></Button>
           </div>
         )}
       </div>

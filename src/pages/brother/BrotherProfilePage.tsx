@@ -24,7 +24,7 @@ import {
 } from '@/src/services/brotherService';
 
 export function BrotherProfilePage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [existingStatus, setExistingStatus] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState<string | null>(null);
@@ -55,11 +55,11 @@ export function BrotherProfilePage() {
   const consentToPublish = watch('consentToPublish');
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
     Promise.all([
-      getBrotherPublicProfile(firebaseUser.uid),
-      getBrotherPrivateDetail(firebaseUser.uid),
+      getBrotherPublicProfile(supabaseUser.id),
+      getBrotherPrivateDetail(supabaseUser.id),
     ])
       .then(([pub, priv]) => {
         if (pub) {
@@ -89,7 +89,7 @@ export function BrotherProfilePage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [firebaseUser, reset]);
+  }, [supabaseUser, reset]);
 
   const toggleLanguage = (lang: string) => {
     const next = selectedLanguages.includes(lang)
@@ -100,10 +100,10 @@ export function BrotherProfilePage() {
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !firebaseUser) return;
+    if (!file || !supabaseUser) return;
     setUploadingPhoto(true);
     try {
-      const url = await uploadBrotherPhoto(firebaseUser.uid, file);
+      const url = await uploadBrotherPhoto(supabaseUser.id, file);
       setPhotoUrl(url);
       toast.success('Photograph uploaded. Save your profile to apply changes.');
     } catch (err) {
@@ -114,11 +114,11 @@ export function BrotherProfilePage() {
   };
 
   const onSubmit = async (values: BrotherRegistrationInput) => {
-    if (!firebaseUser || !firebaseUser.email) return;
+    if (!supabaseUser || !supabaseUser.email) return;
     try {
       await saveBrotherProfile({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
+        uid: supabaseUser.id,
+        email: supabaseUser.email,
         input: values,
         photoUrl,
       });
@@ -227,7 +227,7 @@ export function BrotherProfilePage() {
             </div>
             <div className="space-y-1.5">
               <Label>Verified Email Address</Label>
-              <Input value={firebaseUser?.email || ''} disabled />
+              <Input value={supabaseUser?.email || ''} disabled />
             </div>
           </div>
         </div>

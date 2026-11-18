@@ -1,64 +1,28 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
-import { handleFirestoreError, OperationType } from '@/src/lib/firestoreError';
+import { supabase } from '@/src/lib/supabase';
 import type { ScholarAvailability, ScholarProfile } from '@/src/types/domain';
 
 export async function listActiveScholars(): Promise<ScholarProfile[]> {
-  try {
-    const q = query(
-      collection(db, 'scholars'),
-      where('isActive', '==', true),
-      orderBy('fullName', 'asc')
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as ScholarProfile);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'scholars');
-  }
+  const { data, error } = await supabase.from('scholars').select('*').eq('is_active', true).order('full_name');
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({ ...row, scholarId: row.scholar_id, fullName: row.full_name, sessionPriceLkr: row.session_price_lkr }));
 }
 
 export async function getScholarById(scholarId: string): Promise<ScholarProfile | null> {
-  try {
-    const snap = await getDoc(doc(db, 'scholars', scholarId));
-    if (!snap.exists()) return null;
-    return snap.data() as ScholarProfile;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `scholars/${scholarId}`);
-  }
+  const { data, error } = await supabase.from('scholars').select('*').eq('scholar_id', scholarId).eq('is_active', true).maybeSingle();
+  if (error) throw error;
+  return data ? ({ ...data, scholarId: data.scholar_id, fullName: data.full_name, sessionPriceLkr: data.session_price_lkr } as ScholarProfile) : null;
 }
 
 export async function getScholarByUid(uid: string): Promise<ScholarProfile | null> {
-  try {
-    const q = query(collection(db, 'scholars'), where('uid', '==', uid));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    return snap.docs[0].data() as ScholarProfile;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'scholars');
-  }
+  const { data, error } = await supabase.from('scholars').select('*').eq('uid', uid).maybeSingle();
+  if (error) throw error;
+  return data ? ({ ...data, scholarId: data.scholar_id, fullName: data.full_name } as ScholarProfile) : null;
 }
 
-export async function getScholarAvailability(
-  scholarId: string
-): Promise<ScholarAvailability | null> {
-  try {
-    const snap = await getDoc(doc(db, 'scholarAvailability', scholarId));
-    if (!snap.exists()) return null;
-    return snap.data() as ScholarAvailability;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `scholarAvailability/${scholarId}`);
-  }
+export async function getScholarAvailability(scholarId: string): Promise<ScholarAvailability | null> {
+  const { data, error } = await supabase.from('scholar_availability').select('*').eq('scholar_id', scholarId).maybeSingle();
+  if (error) throw error;
+  return data ? ({ ...data, scholarId: data.scholar_id, weeklyHours: data.weekly_hours, unavailableDates: data.unavailable_dates } as ScholarAvailability) : null;
 }
 
 export async function saveScholarAvailability(params: {
@@ -68,27 +32,15 @@ export async function saveScholarAvailability(params: {
   weeklyHours: ScholarAvailability['weeklyHours'];
   breaks: ScholarAvailability['breaks'];
   unavailableDates: string[];
-}): Promise<void> {
-  const { scholarId, scholarUid, timezone, weeklyHours, breaks, unavailableDates } = params;
-  try {
-    const refDoc = doc(db, 'scholarAvailability', scholarId);
-    const existingSnap = await getDoc(refDoc);
-    const payload: Record<string, unknown> = {
-      scholarId,
-      timezone,
-      weeklyHours,
-      breaks,
-      unavailableDates,
-      createdAt: existingSnap.exists() ? existingSnap.data().createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    if (scholarUid) {
-      payload.scholarUid = scholarUid;
-    }
-    await setDoc(refDoc, payload);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `scholarAvailability/${scholarId}`);
-  }
+}) {
+  const { error } = await supabase.from('scholar_availability').upsert({
+    scholar_id: params.scholarId,
+    timezone: params.timezone,
+    weekly_hours: params.weeklyHours,
+    breaks: params.breaks,
+    unavailable_dates: params.unavailableDates,
+  });
+  if (error) throw error;
 }
 
 export async function updateScholarOwnProfile(params: {
@@ -96,15 +48,11 @@ export async function updateScholarOwnProfile(params: {
   biography: string;
   counsellingFormats: ('online' | 'in_person')[];
   cityLocation: string;
-}): Promise<void> {
-  try {
-    await updateDoc(doc(db, 'scholars', params.scholarId), {
-      biography: params.biography.trim(),
-      counsellingFormats: params.counsellingFormats,
-      cityLocation: params.cityLocation.trim(),
-      updatedAt: serverTimestamp(),
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `scholars/${params.scholarId}`);
-  }
+}) {
+  const { error } = await supabase.from('scholars').update({
+    biography: params.biography,
+    counselling_formats: params.counsellingFormats,
+    city_location: params.cityLocation,
+  }).eq('scholar_id', params.scholarId);
+  if (error) throw error;
 }

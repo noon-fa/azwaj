@@ -19,7 +19,7 @@ import {
 import type { StaffPermission, UserAccount, UserRole } from '@/src/types/domain';
 
 export function AdminUsersPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [staffMap, setStaffMap] = useState<Record<string, StaffPermission>>({});
   const [loading, setLoading] = useState(true);
@@ -70,12 +70,12 @@ export function AdminUsersPage() {
   };
 
   const handleSaveRole = async () => {
-    if (!firebaseUser || !firebaseUser.email || !selectedUser) return;
+    if (!supabaseUser || !supabaseUser.email || !selectedUser) return;
     setSaving(true);
     try {
       await updateUserRoleAndStaffPermissions({
-        actorUid: firebaseUser.uid,
-        actorEmail: firebaseUser.email,
+        actorUid: supabaseUser.id,
+        actorEmail: supabaseUser.email,
         targetUser: selectedUser,
         newRole,
         staffPerms: newRole === 'staff' ? perms : undefined,

@@ -34,7 +34,7 @@ const DEFAULT_HOURS: Record<string, DayAvailability> = {
 };
 
 export function ScholarAvailabilityPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [scholar, setScholar] = useState<ScholarProfile | null>(null);
   const [timezone, setTimezone] = useState('Asia/Colombo');
   const [weeklyHours, setWeeklyHours] = useState<Record<string, DayAvailability>>(DEFAULT_HOURS);
@@ -45,9 +45,9 @@ export function ScholarAvailabilityPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
-    getScholarByUid(firebaseUser.uid)
+    getScholarByUid(supabaseUser.id)
       .then(async (sch) => {
         setScholar(sch);
         if (sch) {
@@ -63,15 +63,15 @@ export function ScholarAvailabilityPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   const handleSave = async () => {
-    if (!scholar || !firebaseUser) return;
+    if (!scholar || !supabaseUser) return;
     setSaving(true);
     try {
       await saveScholarAvailability({
         scholarId: scholar.scholarId,
-        scholarUid: firebaseUser.uid,
+        scholarUid: supabaseUser.id,
         timezone,
         weeklyHours,
         breaks,

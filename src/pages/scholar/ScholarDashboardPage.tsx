@@ -8,24 +8,24 @@ import { getScholarByUid } from '@/src/services/scholarService';
 import type { CounsellingBooking, ScholarProfile } from '@/src/types/domain';
 
 export function ScholarDashboardPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [scholar, setScholar] = useState<ScholarProfile | null>(null);
   const [bookings, setBookings] = useState<CounsellingBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
     Promise.all([
-      getScholarByUid(firebaseUser.uid),
-      listScholarBookings(firebaseUser.uid),
+      getScholarByUid(supabaseUser.id),
+      listScholarBookings(supabaseUser.id),
     ])
       .then(([sch, bk]) => {
         setScholar(sch);
         setBookings(bk);
       })
       .finally(() => setLoading(false));
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   if (loading) {
     return <div className="h-64 rounded-xl border border-[#E5E0D5] bg-white animate-pulse" />;

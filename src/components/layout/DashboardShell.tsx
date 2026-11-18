@@ -25,7 +25,7 @@ export function DashboardShell({
   navItems,
   children,
 }: DashboardShellProps) {
-  const { account, firebaseUser, logout } = useAuth();
+  const { account, supabaseUser, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -70,9 +70,9 @@ export function DashboardShell({
       <div className="space-y-3 border-t border-[#E5E0D5] pt-4">
         <div className="px-2">
           <p className="truncate text-sm font-medium text-[#1A2421]">
-            {account?.displayName || firebaseUser?.email}
+            {account?.displayName || supabaseUser?.email}
           </p>
-          <p className="truncate text-xs text-[#54615C]">{firebaseUser?.email}</p>
+          <p className="truncate text-xs text-[#54615C]">{supabaseUser?.email}</p>
         </div>
         <div className="flex flex-col gap-2">
           <Button asChild variant="outline" size="sm" className="w-full justify-start">

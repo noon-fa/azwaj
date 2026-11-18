@@ -20,7 +20,7 @@ import {
 import type { MarriageRequest } from '@/src/types/domain';
 
 export function BrotherRequestsPage() {
-  const { firebaseUser } = useAuth();
+  const { supabaseUser } = useAuth();
   const [requests, setRequests] = useState<MarriageRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [acceptTarget, setAcceptTarget] = useState<MarriageRequest | null>(null);
@@ -28,10 +28,10 @@ export function BrotherRequestsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const loadRequests = async () => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setLoading(true);
     try {
-      const rows = await listBrotherMarriageRequests(firebaseUser.uid);
+      const rows = await listBrotherMarriageRequests(supabaseUser.id);
       setRequests(rows);
     } finally {
       setLoading(false);
@@ -40,7 +40,7 @@ export function BrotherRequestsPage() {
 
   useEffect(() => {
     void loadRequests();
-  }, [firebaseUser]);
+  }, [supabaseUser]);
 
   const handleAccept = async (e: React.FormEvent) => {
     e.preventDefault();

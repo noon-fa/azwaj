@@ -1,28 +1,27 @@
 import { useState } from 'react';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Button } from '@/src/components/ui/button';
 import { StatusText } from '@/src/components/ui/StatusText';
 import { useAuth } from '@/src/contexts/AuthContext';
-import { db } from '@/src/lib/firebase';
-import { handleFirestoreError, OperationType } from '@/src/lib/firestoreError';
+import { supabase } from '@/src/lib/supabase';
 
 export function BrotherSettingsPage() {
-  const { firebaseUser, account, refreshAccount } = useAuth();
+  const { supabaseUser, account, refreshAccount } = useAuth();
   const [requesting, setRequesting] = useState(false);
 
   const handleRequestDeletion = async () => {
-    if (!firebaseUser) return;
+    if (!supabaseUser) return;
     setRequesting(true);
     try {
-      await updateDoc(doc(db, 'users', firebaseUser.uid), {
-        accountStatus: 'deletion_requested',
-        updatedAt: serverTimestamp(),
-      });
+      const { error } = await supabase.from('users').update({
+        account_status: 'deletion_requested',
+        updated_at: new Date().toISOString(),
+      }).eq('uid', supabaseUser.id);
+      if (error) throw error;
       await refreshAccount();
       toast.success('Account deletion request recorded. Azwaj staff will process your request.');
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${firebaseUser.uid}`);
+      toast.error(error instanceof Error ? error.message : 'Unable to record deletion request.');
     } finally {
       setRequesting(false);
     }
@@ -40,7 +39,7 @@ export function BrotherSettingsPage() {
       <div className="rounded-xl border border-[#E5E0D5] bg-white p-6 space-y-4 text-sm">
         <div className="flex items-center justify-between">
           <span className="text-[#54615C]">Signed-in Email</span>
-          <span className="font-mono text-[#1A2421]">{firebaseUser?.email}</span>
+          <span className="font-mono text-[#1A2421]">{supabaseUser?.email}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-[#54615C]">Account Status</span>

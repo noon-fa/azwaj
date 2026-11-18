@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { Timestamp } from 'firebase/firestore';
 import type { ScholarAvailability } from '@/src/types/domain';
 
 export function cn(...inputs: ClassValue[]) {
@@ -12,15 +11,13 @@ export function calculateAgeFromBirthYear(birthYear: number): number {
   return Math.max(18, currentYear - birthYear);
 }
 
-export function formatTimestamp(ts?: Timestamp | string | Date | null): string {
+export function formatTimestamp(ts?: string | Date | null): string {
   if (!ts) return '—';
   let date: Date;
   if (typeof ts === 'string') {
     date = new Date(ts);
   } else if (ts instanceof Date) {
     date = ts;
-  } else if (typeof (ts as Timestamp).toDate === 'function') {
-    date = (ts as Timestamp).toDate();
   } else {
     return '—';
   }

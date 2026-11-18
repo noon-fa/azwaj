@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 ];
 
 export function PublicHeader() {
-  const { firebaseUser, role } = useAuth();
+  const { supabaseUser, role } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const dashboardPath =
@@ -49,7 +49,7 @@ export function PublicHeader() {
         </nav>
 
         <div className="flex items-center gap-3 shrink-0">
-          {firebaseUser && firebaseUser.emailVerified ? (
+          {supabaseUser && supabaseUser.email_confirmed_at ? (
             <Button asChild size="sm">
               <Link to={dashboardPath}>Dashboard</Link>
             </Button>
