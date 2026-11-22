@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Azwaj",
+    "slug": "azwaj",
+    "scheme": "azwaj",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.azwaj.app"
+    },
+    "android": {
+      "package": "com.azwaj.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
